@@ -1,0 +1,3 @@
+```
+./gradlew sdk:assembleRelease genDemo
+```
