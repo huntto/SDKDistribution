@@ -1,0 +1,137 @@
+String sdkDemoName = 'SDKDemo'
+String demoProjectRootDir = sdkDemoName
+
+task cleanDemo {
+    delete demoProjectRootDir
+}
+
+task copyReadMeToSDKDemo(type: Copy) {
+    from('sdk') {
+        include '*.md'
+    }
+    into demoProjectRootDir
+}
+
+task copyDemoSoruceToSDKDemo(type: Copy) {
+
+    caseSensitive true
+
+    from('demo') {
+        exclude '**/*.iml'
+        exclude '**/*.gitignore'
+        exclude '**/build'
+        exclude '**/androidTest'
+        exclude '**/test'
+        exclude '**/build.gradle'
+    }
+    into demoProjectRootDir + "/demo"
+
+    includeEmptyDirs false
+}
+
+ext {
+    sdkVersionName = '1.0.0'
+    sdkArtifactId = 'sdk'
+}
+
+task copySDKLibToSDKDemoLibs(type: Copy) {
+    caseSensitive true
+
+    from('sdk/build/outputs/aar') {
+        include '**/*.aar'
+    }
+    eachFile {
+        it.path = sdkArtifactId + '-' + sdkVersionName + ".aar"
+    }
+    into demoProjectRootDir + "/demo/libs"
+
+    includeEmptyDirs false
+}
+
+task genModuleBuildGradle {
+    File buildGradleFile = new File(demoProjectRootDir + '/demo/build.gradle')
+    if (!buildGradleFile.exists()) {
+        buildGradleFile.getParentFile().mkdirs()
+        buildGradleFile.createNewFile()
+    }
+    buildGradleFile.withWriter('UTF-8') { writer ->
+        new File(projectDir.absolutePath + '/demo/build.gradle').withReader('UTF-8') { reader ->
+            reader.eachLine {
+                if (it.contains("implementation project(':sdk')")) {
+                    writer.writeLine('''    File[] libFiles = new File('demo/libs').listFiles()
+    for (File file : libFiles) {
+        implementation files("libs/${file.name}")
+    }'''
+                    )
+                } else {
+                    writer.writeLine(it)
+                }
+            }
+        }
+    }
+}
+
+task genSettingsGradle {
+    File settingsGradleFile = new File(demoProjectRootDir + '/settings.gradle')
+    if (!settingsGradleFile.exists()) {
+        settingsGradleFile.getParentFile().mkdirs()
+        settingsGradleFile.createNewFile()
+    }
+    settingsGradleFile.withWriter('UTF-8') { writer ->
+        writer.writeLine('''include ':demo' ''')
+    }
+}
+
+task genBuildGradle {
+    File buildGradleFile = new File(demoProjectRootDir + '/build.gradle')
+    if (!buildGradleFile.exists()) {
+        buildGradleFile.getParentFile().mkdirs()
+        buildGradleFile.createNewFile()
+    }
+    buildGradleFile.withWriter('UTF-8') { writer ->
+        writer.writeLine('''// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+    repositories {
+        google()
+        jcenter()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:3.3.1\'
+
+        // NOTE: Do not place your application dependencies here; they belong
+        // in the individual module build.gradle files
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        jcenter()
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}
+''')
+    }
+}
+
+task zipDemo(type: Zip) {
+    from demoProjectRootDir
+    into sdkDemoName
+    baseName = sdkDemoName
+    destinationDir file('.')
+}
+
+tasks.create(name: "genDemo", dependsOn: [
+        cleanDemo,
+        copyReadMeToSDKDemo,
+        copyDemoSoruceToSDKDemo,
+        copySDKLibToSDKDemoLibs,
+        genModuleBuildGradle,
+        genSettingsGradle,
+        genBuildGradle,
+        zipDemo
+])
